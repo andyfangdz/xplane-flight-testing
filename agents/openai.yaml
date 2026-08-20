@@ -1,0 +1,4 @@
+interface:
+  display_name: "X-Plane Flight Testing"
+  short_description: "Run repeatable POH-based X-Plane flight tests"
+  default_prompt: "Use $test-xplane-aircraft to benchmark this X-Plane aircraft against its POH."
