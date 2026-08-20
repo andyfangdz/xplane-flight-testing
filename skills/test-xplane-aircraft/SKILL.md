@@ -21,12 +21,12 @@ Measure what the aircraft actually does in X-Plane. Treat configuration inspecti
 - Hash the source ACF and relevant runtime/plugin files before testing. Use a duplicate aircraft or reversible mod package.
 - Record payload, station weights, tank fuel, weather, simulator/add-on versions, and any global plugin isolation.
 - Use a dedicated X-Plane process and Web API port. Persist its exact PID, executable path, start time, and arguments; verify that identity before stopping only that process.
-- For a clean-profile test, isolate non-stock global plugins and the complete Custom Scenery tree with an exact manifest and a prewritten recovery script. Read [references/clean-profile-testing.md](references/clean-profile-testing.md) before moving anything.
+- For a clean-profile test, isolate non-stock global plugins and the complete Custom Scenery tree with an exact manifest and a prewritten recovery script. Read [references/clean-profile-testing.md](references/clean-profile-testing.md) before moving anything. Inventory reparse points and use atomic directory moves; never fall back to a recursive scenery move.
 - Keep test backups and quarantines outside `Aircraft`; X-Plane can scan an apparently valid aircraft folder that contains broken internal paths.
-- Launch automated trials hidden with `--no_sound --no_joysticks --no_prefs --no_save_prefs` when those restrictions fit the test. Quote an aircraft path containing spaces as one `--load_acf` argument.
+- Launch automated trials hidden with `--no_sound --no_joysticks --no_prefs --no_save_prefs` only when those restrictions fit the test. Omit `--no_sound` for aural evidence, and remember that `--no_prefs` can initialize individual sound groups at zero volume.
 - Treat setup probes, rejected runs, and runs followed by crash callbacks as non-performance evidence. Retain them, but keep them separate from accepted results.
 - A bad airborne load can leave sticky autopilot references, failures, or plugin state. Reset and read back state before every run. Use a fresh `/flight` load for each state-sensitive card, and restart the isolated process after an anomalous run rather than continuing blindly.
-- Diagnose `Log.txt` before blaming the aircraft. Isolate a global plugin only through a user-authorized, reversible, exact-file move, then restore it and verify the final log.
+- Diagnose `Log.txt` before blaming the aircraft. For crashes, fatal dialogs, or main-thread enforcement failures, read [references/plugin-crash-triage.md](references/plugin-crash-triage.md). Isolate a global plugin only through a user-authorized, reversible, exact-file move, then restore it and verify the final log.
 
 ### 3. Build the test card
 
@@ -44,6 +44,8 @@ For every point, specify:
 Use 15 samples at 0.75-second intervals after 30-120 seconds of official stabilization as a strong default. Read [references/xplane-web-api-testing.md](references/xplane-web-api-testing.md) before changing an automated trial. For plugin-heavy aircraft or unreliable generic autopilot commands, also read [references/custom-aircraft-control.md](references/custom-aircraft-control.md).
 
 For stall-speed validation or calibration, read [references/stall-calibration.md](references/stall-calibration.md). Dynamic cards need a sustained entry gate, an explicit break detector, repeated accepted runs, and separate setup-failure evidence; steady-state sampling defaults do not apply.
+
+When the user requests a video or aural evidence, read [references/audio-video-evidence.md](references/audio-video-evidence.md). The flight trace remains the measurement authority; video and sound are synchronized supporting evidence and must pass their own acceptance checks.
 
 ### 4. Load safely and prove the achieved state
 
@@ -84,6 +86,8 @@ Reject when any required condition is not continuously met, including:
 - absence of post-run crash callbacks.
 
 Persist raw JSON for every rejected sampling run and a diagnostic JSON for setup failures. Record ranges as well as means. Never promote a rejected probe merely because its average looks plausible.
+
+For evidence runs, also reject a silent or truncated audio stream, failed sound-volume readback, corrupt video, or a recording that cannot be aligned to the accepted trace.
 
 ### 7. Compare, tune, and rerun
 

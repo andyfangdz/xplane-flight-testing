@@ -1,0 +1,4 @@
+interface:
+  display_name: "X-Plane Aircraft Mod Development"
+  short_description: "Build and calibrate aircraft-local X-Plane mods"
+  default_prompt: "Use $develop-xplane-aircraft-mod to design and validate this X-Plane aircraft modification."
