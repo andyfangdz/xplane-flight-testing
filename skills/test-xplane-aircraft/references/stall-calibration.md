@@ -33,12 +33,20 @@ Save the complete setup trace as `*.setup-failure.json` on failure. It is diagno
 ## Measure the break
 
 - Follow the POH deceleration method when specified. For the recent SR20 campaign, accepted entries decelerated between 0.10 and 1.50 kt/s; treat that as a proven campaign range rather than a universal standard.
-- Prefer a detector tied to the simulated aerodynamic break, such as a threshold count of stalled main-wing elements plus a load-factor drop or sink-rate onset. Preserve post-break samples so the trigger can be audited.
+- Prefer a detector tied to the simulated aerodynamic break, such as a threshold of stalled main-wing area plus a load-factor drop or sink-rate onset. Preserve post-break samples so the trigger can be audited.
 - Stall warning or a displayed AoA cue may lead or lag the native break. Record it, but do not silently substitute it for the chosen break definition.
-- For the SR20 harness, the audited detector was the first sample with at least six stalled main-wing elements and either load factor below 0.88 or VVI below -500 fpm, falling back to the first six-element sample only if necessary. Revalidate these thresholds before using them on another aircraft or X-Plane version.
-- Compute and retain pre-break bank over a defined window, entry deceleration rate, load factor, VVI, AoA, pitch rate, control positions, native stalled-element count, warning state, and mod force/activation diagnostics.
+- Treat flattened element arrays as aircraft- and version-specific. Verify which indices are main-wing surfaces before selecting them; an audited SR20/X-Plane 12 mapping used surfaces 0 through 5, flattened indices 0 through 59.
+- Weight each selected element by `sim/flightmodel2/wing/element_surface_area_mtr_sq`, exclude inactive elements with area at or below 0.0001 m², and compute stalled-area fraction. Raw element counts let tiny or inactive elements distort the trigger.
+- For the audited SR20 campaign, 3% stalled area marked onset and 12% plus either load factor below 0.88 or VVI below -500 fpm marked the break. Those values are campaign evidence, not universal defaults; revalidate them for another aircraft or X-Plane version.
+- Compute and retain pre-break bank over a defined window, entry deceleration rate, load factor, VVI, body AoA, wing-area-weighted local AoA, maximum local element AoA, stalled-area fraction, pitch rate, control positions, warning state, and mod force/activation diagnostics.
 
 Reject a measured run for configuration mismatch, insufficient entry gate, deceleration outside the declared method, pre-break bank outside tolerance, ambiguous break evidence, or unexpected correction state. A plausible speed does not rescue a rejected maneuver.
+
+## Interpret AoA and sampling correctly
+
+Do not equate aircraft body AoA with the local AoA at the wing elements. Wing incidence, downwash, flap geometry, and local flow can make the wing-area-weighted and maximum element AoA materially higher than the body value. Report all three rather than declaring a stall threshold from body AoA alone.
+
+Sampling large element arrays can slow the harness or native movie recorder enough to change the real-time loop rate. Express pitch ramps, control changes, and other maneuver controllers per elapsed wall-clock second, not per iteration. Record actual sample timestamps and calculate the achieved deceleration from them. A lightweight evidence-only pass is acceptable only after an authoritative instrumented trace has passed with the same aircraft configuration; it must not promote a rejected maneuver.
 
 ## Tune without fitting one lucky run
 

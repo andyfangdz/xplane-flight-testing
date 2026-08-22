@@ -31,6 +31,12 @@ function Test-MarkedPlaceholder([string] $Directory, [string] $MarkerName, [stri
     return (Get-Content -LiteralPath $items[0].FullName -Raw) -eq $Token
 }
 
+function Test-CleanProfileSceneryIndex([string] $Path) {
+    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) { return $false }
+    $normalized = (Get-Content -LiteralPath $Path -Raw).Replace("`r`n", "`n")
+    return $normalized -eq "I`n1000 Version`nSCENERY`n`nSCENERY_PACK *GLOBAL_AIRPORTS*`n"
+}
+
 function Target-Array($Value) {
     if ($null -eq $Value) { return @() }
     return @($Value | ForEach-Object { [string]$_ })
@@ -43,7 +49,8 @@ if (Get-Process -Name 'X-Plane' -ErrorAction SilentlyContinue) {
 $Manifest = Full-Path $ManifestPath
 if (-not (Test-Path -LiteralPath $Manifest -PathType Leaf)) { throw "Manifest is missing: $Manifest" }
 $manifestData = Get-Content -LiteralPath $Manifest -Raw | ConvertFrom-Json
-if ([int]$manifestData.schema_version -ne 4) { throw 'This recovery script requires clean-profile manifest schema_version 4.' }
+$schemaVersion = [int]$manifestData.schema_version
+if ($schemaVersion -notin @(4, 5)) { throw 'This recovery script supports clean-profile manifest schema_version 4 or 5.' }
 
 $isolationRoot = Split-Path -Parent $Manifest
 $xplaneRoot = Full-Path ([string]$manifestData.xplane_root)
@@ -73,7 +80,23 @@ foreach ($entry in @($manifestData.plugin_entries)) {
 
 $stagedExists = Test-Path -LiteralPath $stagedScenery -PathType Container
 $liveExists = Test-Path -LiteralPath $liveScenery -PathType Container
+$preservedGeneratedSceneryIndex = $null
 if ($stagedExists -and $liveExists) {
+    $liveItems = @(Get-ChildItem -LiteralPath $liveScenery -Force)
+    $markerItem = @($liveItems | Where-Object { $_.Name -eq $markerName -and -not $_.PSIsContainer })
+    $generatedIndexItem = @($liveItems | Where-Object { $_.Name -eq 'scenery_packs.ini' -and -not $_.PSIsContainer })
+    if ($liveItems.Count -eq 2 -and $markerItem.Count -eq 1 -and
+        (Get-Content -LiteralPath $markerItem[0].FullName -Raw) -eq $markerToken -and
+        $generatedIndexItem.Count -eq 1 -and
+        (Test-CleanProfileSceneryIndex $generatedIndexItem[0].FullName)) {
+        $preservedGeneratedSceneryIndex = Assert-Within `
+            (Join-Path $isolationRoot 'test-generated-scenery_packs.ini') `
+            $isolationRoot 'Preserved generated scenery index'
+        if (Test-Path -LiteralPath $preservedGeneratedSceneryIndex) {
+            throw "Generated scenery-index evidence collision: $preservedGeneratedSceneryIndex"
+        }
+        Move-Atomic $generatedIndexItem[0].FullName $preservedGeneratedSceneryIndex
+    }
     if (-not (Test-MarkedPlaceholder $liveScenery $markerName $markerToken)) {
         throw 'Both staged and live scenery exist, and live scenery is not the exact marked placeholder. Preserve both; do not merge recursively.'
     }
@@ -131,6 +154,24 @@ $hashResults = @($manifestData.critical_hashes | ForEach-Object {
 })
 $hashMismatches = @($hashResults | Where-Object { -not $_.match })
 
+$protectedResult = [ordered]@{ required = ($schemaVersion -ge 5); verified = ($schemaVersion -lt 5); snapshot_path = $null; error = $null }
+if ($schemaVersion -ge 5) {
+    if (-not $manifestData.protected_installation_snapshot) {
+        $protectedResult.error = 'schema_version 5 requires protected_installation_snapshot.'
+    } else {
+        try {
+            $protectedSnapshot = Assert-Within ([string]$manifestData.protected_installation_snapshot) $isolationRoot 'Protected installation snapshot'
+            $protectedResult.snapshot_path = $protectedSnapshot
+            $guardScript = Join-Path $PSScriptRoot 'Protect-XPlaneInstallState.ps1'
+            $guardOutput = & $guardScript -Mode Verify -XPlaneRoot $xplaneRoot -SnapshotPath $protectedSnapshot | ConvertFrom-Json
+            $protectedResult.verified = [bool]$guardOutput.verified
+        } catch {
+            $protectedResult.verified = $false
+            $protectedResult.error = $_.Exception.Message
+        }
+    }
+}
+
 $quarantineRoots = @($manifestData.plugin_entries | ForEach-Object { Split-Path -Parent ([string]$_.quarantined_path) } | Sort-Object -Unique)
 $quarantineCount = 0
 foreach ($root in $quarantineRoots) {
@@ -140,6 +181,7 @@ foreach ($root in $quarantineRoots) {
 $verified = $missingPlugins.Count -eq 0 -and $extraPlugins.Count -eq 0 -and
     $missingScenery.Count -eq 0 -and $extraScenery.Count -eq 0 -and
     $reparseMismatches.Count -eq 0 -and $hashMismatches.Count -eq 0 -and
+    $protectedResult.verified -and
     $quarantineCount -eq 0 -and -not (Test-Path -LiteralPath $stagedScenery)
 
 $statusData = [ordered]@{
@@ -157,6 +199,8 @@ $statusData = [ordered]@{
     staged_scenery_exists = Test-Path -LiteralPath $stagedScenery
     reparse_points = $reparseResults
     critical_hashes = $hashResults
+    protected_installation = $protectedResult
+    generated_scenery_index_preserved = $preservedGeneratedSceneryIndex
 }
 
 if ($verified -and (Test-Path -LiteralPath $placeholderPark)) {

@@ -22,8 +22,10 @@ Measure what the aircraft actually does in X-Plane. Treat configuration inspecti
 - Record payload, station weights, tank fuel, weather, simulator/add-on versions, and any global plugin isolation.
 - Use a dedicated X-Plane process and Web API port. Persist its exact PID, executable path, start time, and arguments; verify that identity before stopping only that process.
 - For a clean-profile test, isolate non-stock global plugins and the complete Custom Scenery tree with an exact manifest and a prewritten recovery script. Read [references/clean-profile-testing.md](references/clean-profile-testing.md) before moving anything. Inventory reparse points and use atomic directory moves; never fall back to a recursive scenery move.
+- Before isolation, capture protected installation state with `scripts/Protect-XPlaneInstallState.ps1`. Treat stock `Resources/default scenery`, `Global Scenery`, and vendor library links as read-only: never move, replace, redirect, or populate them for a test. An empty/missing stock tree or materialized vendor junction is a preflight failure, not a condition to work around.
 - Keep test backups and quarantines outside `Aircraft`; X-Plane can scan an apparently valid aircraft folder that contains broken internal paths.
 - Launch automated trials hidden with `--no_sound --no_joysticks --no_prefs --no_save_prefs` only when those restrictions fit the test. Omit `--no_sound` for aural evidence, and remember that `--no_prefs` can initialize individual sound groups at zero volume.
+- A clean profile can remove the cause of a user-reported startup or control failure. Reproduce the exact reported path separately—including 2D versus VR, preferences, plugins, and scenery—and require the log to prove every suspected component actually loaded before treating that run as a valid control.
 - Treat setup probes, rejected runs, and runs followed by crash callbacks as non-performance evidence. Retain them, but keep them separate from accepted results.
 - A bad airborne load can leave sticky autopilot references, failures, or plugin state. Reset and read back state before every run. Use a fresh `/flight` load for each state-sensitive card, and restart the isolated process after an anomalous run rather than continuing blindly.
 - Diagnose `Log.txt` before blaming the aircraft. For crashes, fatal dialogs, or main-thread enforcement failures, read [references/plugin-crash-triage.md](references/plugin-crash-triage.md). Isolate a global plugin only through a user-authorized, reversible, exact-file move, then restore it and verify the final log.
@@ -102,7 +104,7 @@ For evidence runs, also reject a silent or truncated audio stream, failed sound-
 
 Report simulator, aircraft, and mod versions; exact runtime formulas; POH rows and interpolation; accepted averages and stability ranges; rejected-run reasons; charts; limitations; final log review; and source/restoration hashes.
 
-Restore every temporarily isolated plugin, scenery tree, or setting after stopping the test PID. Verify the manifest entry count, exact restored name sets, empty quarantine, critical hashes, and exact source ACF hash before reporting completion. If a graceful quit exceeds a bounded wait, verify the exact PID identity before forcing only that process.
+Restore every temporarily isolated plugin, scenery tree, or setting after stopping the test PID. Verify the manifest entry count, exact restored name sets, empty quarantine, critical hashes, protected-installation snapshot, and exact source ACF hash before reporting completion. If a graceful quit exceeds a bounded wait, verify the exact PID identity before forcing only that process.
 
 ## Safety and scope
 

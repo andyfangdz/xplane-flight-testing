@@ -7,6 +7,7 @@ param(
     [Parameter(Mandatory)] [string] $OutputPath,
     [string] $ResultPath,
     [Nullable[datetime]] $VideoStartUtc,
+    [ValidateRange(0.5, 2.0)] [double] $AudioTempoRatio = 1.0,
     [double] $MinimumPeakLinear = 0.0001,
     [double] $MinimumRmsLinear = 0.00001,
     [switch] $Force
@@ -23,6 +24,7 @@ function Require-File([string] $Path, [string] $Label) {
 }
 
 function Invoke-Ffmpeg([string[]] $Arguments, [string] $Operation) {
+    Write-Verbose ("{0} arguments: {1}" -f $Operation, ($Arguments -join ' | '))
     $output = (& $script:Ffmpeg @Arguments 2>&1 | Out-String)
     if ($LASTEXITCODE -ne 0) {
         throw "$Operation failed with FFmpeg exit code $LASTEXITCODE.`n$output"
@@ -65,12 +67,13 @@ if ([double]$metadata.duration_seconds -le 0) { throw 'Audio duration is not pos
 $audioStart = [DateTimeOffset]::FromUnixTimeMilliseconds(
     [long][math]::Round([double]$metadata.started_epoch * 1000.0)
 ).UtcDateTime
-$videoStart = if ($null -ne $VideoStartUtc -and $VideoStartUtc.HasValue) {
-    $VideoStartUtc.Value.ToUniversalTime()
+$videoStart = if ($PSBoundParameters.ContainsKey('VideoStartUtc')) {
+    ([datetime]$VideoStartUtc).ToUniversalTime()
 } else {
     (Get-Item -LiteralPath $Video).CreationTimeUtc
 }
 $offsetSeconds = ($videoStart - $audioStart).TotalSeconds
+Write-Verbose ("Video start UTC: {0:o}; audio start UTC: {1:o}; alignment seconds: {2:F6}" -f $videoStart, $audioStart, $offsetSeconds)
 $offsetText = [string]::Format(
     [Globalization.CultureInfo]::InvariantCulture,
     '{0:F6}',
@@ -92,14 +95,25 @@ if ($offsetSeconds -ge 0) {
 }
 foreach ($argument in @(
     '-map', '0:v:0', '-map', '1:a:0',
-    '-c:v', 'libx264', '-crf', '21', '-preset', 'medium', '-pix_fmt', 'yuv420p',
+    '-c:v', 'libx264', '-crf', '21', '-preset', 'medium', '-pix_fmt', 'yuv420p'
+)) { $muxArguments.Add($argument) }
+if ([math]::Abs($AudioTempoRatio - 1.0) -gt 0.000001) {
+    $tempoText = [string]::Format(
+        [Globalization.CultureInfo]::InvariantCulture,
+        'atempo={0:F9}',
+        $AudioTempoRatio
+    )
+    foreach ($argument in @('-filter:a', $tempoText)) { $muxArguments.Add($argument) }
+}
+foreach ($argument in @(
     '-c:a', 'aac', '-b:a', '192k', '-ar', '48000',
     '-shortest', '-movflags', '+faststart', $Output
 )) { $muxArguments.Add($argument) }
 
 Invoke-Ffmpeg $muxArguments.ToArray() 'Evidence mux' | Out-Null
-Invoke-Ffmpeg @('-v', 'error', '-i', $Output, '-f', 'null', '-') 'Full decode verification' | Out-Null
-$volumeOutput = Invoke-Ffmpeg @('-hide_banner', '-i', $Output, '-af', 'volumedetect', '-f', 'null', '-') 'Volume verification'
+$nullSink = if ($IsWindows) { 'NUL' } else { '-' }
+Invoke-Ffmpeg @('-v', 'error', '-i', $Output, '-f', 'null', $nullSink) 'Full decode verification' | Out-Null
+$volumeOutput = Invoke-Ffmpeg @('-hide_banner', '-i', $Output, '-af', 'volumedetect', '-f', 'null', $nullSink) 'Volume verification'
 $meanMatch = [regex]::Match($volumeOutput, 'mean_volume:\s*([^\s]+)\s*dB')
 $maxMatch = [regex]::Match($volumeOutput, 'max_volume:\s*([^\s]+)\s*dB')
 if (-not $meanMatch.Success -or -not $maxMatch.Success) {
@@ -116,6 +130,7 @@ $verification = [ordered]@{
     video_start_utc = $videoStart.ToString('o')
     audio_start_utc = $audioStart.ToString('o')
     audio_alignment_seconds = $offsetSeconds
+    audio_tempo_ratio = $AudioTempoRatio
     source_audio_duration_seconds = [double]$metadata.duration_seconds
     source_audio_peak_linear = [double]$metadata.peak_linear
     source_audio_rms_linear = [double]$metadata.rms_linear

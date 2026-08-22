@@ -29,7 +29,9 @@ Check `Log.txt` for the FMOD output driver. The WASAPI loopback endpoint must co
 5. Stop X-Plane's movie recorder first, then create the audio stop sentinel and wait for clean recorder exit.
 6. Reject the evidence unless the flight card passed, the audio metadata is non-silent and long enough, and the movie fully decodes.
 
-The native X-Plane AVI commonly contains MJPEG video without audio. Use [Finalize-XPlaneEvidence.ps1](../scripts/Finalize-XPlaneEvidence.ps1) to align the loopback WAV from the two start timestamps, encode H.264/AAC, perform a full decode pass, and measure output volume.
+The native movie recorder and large telemetry reads can materially slow the control loop. Make maneuver ramps depend on elapsed wall-clock time and log actual sample times. Do not assume the native AVI duration equals the wall-clock capture span.
+
+The native X-Plane AVI commonly contains MJPEG video without audio. Use [Finalize-XPlaneEvidence.ps1](../scripts/Finalize-XPlaneEvidence.ps1) to align the loopback WAV from the two start timestamps, optionally correct a measured recorder timing ratio, encode H.264/AAC, perform a full decode pass, and measure output volume.
 
 Example capture command:
 
@@ -50,9 +52,12 @@ Example finalization command:
   -AudioPath <run>/audio.wav `
   -AudioMetadataPath <run>/audio.metadata.json `
   -FfmpegPath <ffmpeg.exe> `
+  -AudioTempoRatio <wall-clock-movie-span/video-duration> `
   -OutputPath <run>/accepted-evidence.mp4 `
   -ResultPath <run>/accepted-evidence.verification.json
 ```
+
+Omit `-AudioTempoRatio` when the measured ratio is effectively 1.0. When durations disagree materially, use the measured ratio; for example, an 83.55-second wall-clock movie span divided by a 72.25-second AVI requires about `1.1564`. Do not blindly timestamp-mux streams whose clocks demonstrably disagree.
 
 ## Acceptance
 
@@ -63,6 +68,7 @@ Reject and repeat when any of these is true:
 - the audio endpoint differs from the device X-Plane actually used;
 - the final MP4 fails a complete decode, has no video or audio stream, or reports effectively silent output;
 - frames around the measured event do not show the expected pre-event, event, and recovery phases;
-- timestamps cannot place the measured telemetry event within the recording.
+- timestamps and the measured duration ratio cannot place the telemetry event within the recording;
+- event-window audio analysis does not show the expected warning even though whole-file peak or RMS passes.
 
-Extract frames before, at, and after the trace event and inspect them. For stalls, the warning horn is supporting evidence only; use the flight-model break detector and trace as the measurement authority.
+Extract frames before, at, and after the trace event and inspect them. Cross-check visible airspeed or another event cue against the synchronized telemetry time. Analyze short pre-warning and warning audio windows using RMS and an appropriate spectral band; whole-file RMS can be dominated by engine noise and does not prove a horn is present. For stalls, the warning horn is supporting evidence only; use the flight-model break detector and trace as the measurement authority.

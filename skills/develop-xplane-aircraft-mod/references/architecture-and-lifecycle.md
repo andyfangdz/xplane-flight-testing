@@ -28,6 +28,13 @@ A flight-model plugin must not command vertical speed or position to manufacture
 - Use before/after-flight-model callbacks intentionally and document why the selected phase is correct.
 - Keep SDK/dataref operations on X-Plane's main thread. Worker threads may do isolated computation or I/O only within the SDK contract.
 
+Treat writable bindings in Lua and test harnesses as subsystem ownership too.
+Do not leave an occasionally written position, attitude, throttle, or autopilot
+dataref continuously writable for convenient reads; bind it read-only and issue
+one-shot writes only during a bounded requested operation. If simulator state
+changes and then snaps back, inventory every writer before modifying the native
+system or adding an adapter.
+
 ## Fail-closed lifecycle
 
 The plugin must return the host aircraft to native behavior when any of these becomes true:

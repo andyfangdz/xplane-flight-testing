@@ -31,9 +31,13 @@ Do not solve performance by commanding vertical speed, position, attitude, or au
 
 For interpolation, realized-atmosphere handling, wide-envelope matrices, and regression strategy, read [references/poh-surface-calibration.md](references/poh-surface-calibration.md).
 
+For stall aerodynamics, local-versus-body AoA, and native warning scheduling, read [references/stall-and-warning-modeling.md](references/stall-and-warning-modeling.md). Calibrate the aerodynamic break and aural-warning lead as separate behaviors.
+
 ## Integrate avionics deliberately
 
 Prefer publishing modeled values through standard simulator datarefs so the installed native avionics renderer remains responsible for layout, fonts, page navigation, and softkeys. Prove renderer behavior in the simulator; ACF metadata alone may not control private widget layouts.
+
+Treat presentation changes as a separate acceptance decision. Do not add a label overlay merely to repair an underlying command or state-ownership bug, and do not describe an after-draw overlay as native-widget reuse.
 
 For native X1000 engine-page reuse, cylinder-slot mapping, override ownership, and visual/lifecycle acceptance, read [references/native-x1000-integration.md](references/native-x1000-integration.md).
 

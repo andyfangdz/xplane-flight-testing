@@ -12,6 +12,25 @@ Do not claim native-widget reuse merely because a custom draw callback visually 
 
 Choose the narrowest viable design and state it accurately.
 
+## Treat annunciation overlays as opt-in experiments
+
+Stock autopilot commands can have correct control behavior while the native
+X1000 uses a different annunciation label. Fix command routing or conflicting
+dataref ownership independently. An after-draw label that covers `ROL`/`PIT`
+with different text is a visual overlay, not a reused native annunciator, and
+requires explicit acceptance as a separate presentation change.
+
+Keep such experiments separately deployable so removing them restores native
+behavior without touching the flight model or autopilot. Verify that removal
+also removes the plugin's callbacks and diagnostic datarefs.
+
+Callback registration or an increasing draw counter proves only that X-Plane
+called the callback. It does not prove pixels were rendered. Inspect the actual
+panel and pop-out device under the active graphics backend and scaling. Legacy
+immediate-mode OpenGL may fail under Vulkan or disturb later drawing; prefer
+supported SDK drawing primitives. Test VR only when it is part of the stated
+scope, and never infer a VR cause from a component merely being VR-capable.
+
 ## Probe renderer assumptions in the simulator
 
 ACF cylinder count, ICAO metadata, or invalid values may not change a private renderer's column layout. Test candidate controls in a duplicate aircraft and retain screenshots/state/logs for both full and compact pages. A private X1000 layer may render after SDK drawing callbacks, and a global suppression dataref may hide the whole EIS rather than individual widgets.
